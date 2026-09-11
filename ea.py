@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """ea.py — english-annotate 단일 스크립트 (stdlib 전용).
   python3 ea.py extract  input.txt --title T --source URL > scaffold.json
-  python3 ea.py build    data.json OUT.html DRIVE_URL "DATE" [--note "문구"]   # 검증 + 뷰어 HTML + email.html
+  python3 ea.py build    data.json OUT.html DRIVE_URL "DATE" [--note "문구"] [--folder DRIVE_FOLDER_ID]   # 검증 + 뷰어 HTML + email.html
   python3 ea.py check    OUT.html                                            # Playwright 렌더 검증
 """
 import sys, re, json, os, html, argparse
@@ -10,7 +10,6 @@ import sys, re, json, os, html, argparse
 TYPES = ("mod", "tense", "modal", "subj")
 LBL = {"mod": "후치수식", "tense": "시제", "modal": "조동사", "subj": "가정법"}
 COL = {"mod": "#0284c7", "tense": "#16a34a", "modal": "#7c3aed", "subj": "#ea580c"}
-FOLDER = "https://drive.google.com/drive/folders/1vzqf9MGGTJPrxDwr4gWJUw10RcYLp5Kc"
 _ABBREV = ["Mr", "Mrs", "Ms", "Dr", "Prof", "St", "vs", "etc", "e.g", "i.e", "cf", "Fig", "No", "Inc", "Ltd", "Co",
            "U.S", "U.K", "Ph.D", "M.D", "a.m", "p.m", "approx", "Rep", "Sen", "Gov", "Gen", "Col", "Lt", "Sgt", "Capt", "Jr", "Sr"]
 MARK = "\x01"
@@ -51,7 +50,7 @@ def validate(data):
     return errs
 
 # ---------- email ----------
-def email_html(data, drive_url, date, note):
+def email_html(data, drive_url, date, note, folder=""):
     m = data["meta"]; n_notes = sum(len(p.get("notes", [])) for p in data["paragraphs"])
     hl = lambda en: re.sub(r"<span class='hl (\w+)'>(.*?)</span>", lambda x: f"<b style='color:{COL[x.group(1)]}'>{x.group(2)}</b>", en)
     E = html.escape
@@ -68,7 +67,8 @@ def email_html(data, drive_url, date, note):
             o.append("<ul style='margin:2px 0;padding-left:18px;font-size:12.5px;color:#333'>" + "".join(
                 f"<li><b style='color:{COL[n['type']]}'>[{LBL[n['type']]}] {E(n['span'])}</b> — {E(n['ko'])}</li>" for n in p["notes"]) + "</ul>")
     if note: o.append(f"<p style='font-size:12px;color:#555'>※ {E(note)}</p>")
-    o.append(f"<p style='font-size:11px;color:#888;margin-top:16px'>english-annotate 자동 발송 · 후치수식·시제·조동사·가정법 4유형 · 보관함: <a href='{FOLDER}'>english-annotate-daily</a></p></div>")
+    box = f" · 보관함: <a href='https://drive.google.com/drive/folders/{folder}'>english-annotate-daily</a>" if folder else ""
+    o.append(f"<p style='font-size:11px;color:#888;margin-top:16px'>english-annotate 자동 발송 · 후치수식·시제·조동사·가정법 4유형{box}</p></div>")
     return "\n".join(o)
 
 # ---------- build ----------
@@ -84,7 +84,7 @@ def cmd_build(a):
     page = TPL.replace(default, "/*__DATA__*/ " + json.dumps(data, ensure_ascii=False, separators=(",", ":")))
     page = page.replace("__TITLE__", html.escape(data["meta"].get("title") or "영어 구문 주석", quote=False))
     open(a.out, "wb").write(page.encode("utf-8"))
-    em = email_html(data, a.drive_url, a.date, a.note)
+    em = email_html(data, a.drive_url, a.date, a.note, a.folder)
     open("email.html", "w", encoding="utf-8").write(em)
     sz = os.path.getsize(a.out)
     print(f"WROTE {a.out} ({sz} bytes) / email.html ({len(em.encode('utf-8'))} bytes)")
@@ -115,7 +115,7 @@ def cmd_check(a):
 def main():
     ap = argparse.ArgumentParser(); sp = ap.add_subparsers(dest="cmd", required=True)
     e = sp.add_parser("extract"); e.add_argument("infile"); e.add_argument("--title", default=""); e.add_argument("--source", default=""); e.set_defaults(fn=cmd_extract)
-    b = sp.add_parser("build"); b.add_argument("data"); b.add_argument("out"); b.add_argument("drive_url"); b.add_argument("date"); b.add_argument("--note", default=""); b.set_defaults(fn=cmd_build)
+    b = sp.add_parser("build"); b.add_argument("data"); b.add_argument("out"); b.add_argument("drive_url"); b.add_argument("date"); b.add_argument("--note", default=""); b.add_argument("--folder", default=""); b.set_defaults(fn=cmd_build)
     c = sp.add_parser("check"); c.add_argument("out"); c.set_defaults(fn=cmd_check)
     a = ap.parse_args(); a.fn(a)
 
